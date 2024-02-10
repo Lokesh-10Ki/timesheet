@@ -42,6 +42,24 @@ import {
 } from "./DropdownOptions";
 
 const TimesheetPanel = () => {
+
+  //States declaration
+  const [weekStartDate, setWeekStartDate] = useState(DateTime.local());
+  const [weekEndDate, setWeekEndDate] = useState(DateTime.local());
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const [tasks, setTasks] = useState(otherTasks);
+  const [total, setTotal] = useState({
+    mon: 0,
+    tue: 0,
+    wed: 0,
+    thu: 0,
+    fri: 0,
+    sat: 0,
+    sun: 0,
+    overall: 0,
+  });
+
   const BAURowTemplate = {
     startDate: weekStartDate,
     projectType: "BAU Activity",
@@ -78,24 +96,8 @@ const TimesheetPanel = () => {
     total: "",
   };
 
-  //States declaration
-  const [weekStartDate, setWeekStartDate] = useState(DateTime.local());
-  const [weekEndDate, setWeekEndDate] = useState(DateTime.local());
-  const [searchTerm, setSearchTerm] = useState("");
-  const [isOpen, setIsOpen] = useState(false);
-  const [tasks, setTasks] = useState(otherTasks);
   const [BAURows, setBAURows] = useState([BAURowTemplate]);
   const [salesRows, setSalesRows] = useState([salesRowTemplate]);
-  const [total, setTotal] = useState({
-    mon: 0,
-    tue: 0,
-    wed: 0,
-    thu: 0,
-    fri: 0,
-    sat: 0,
-    sun: 0,
-    overall: 0,
-  });
 
   //Effect to set the current week on component mount
   useEffect(() => {
@@ -137,7 +139,6 @@ const TimesheetPanel = () => {
 
   //Function to calculate and set the start and end dates of the current week
   const setCurrentWeek = () => {
-    console.log(weekStartDate);
     const today = DateTime.now();
     const weekStart = today.startOf("week");
     const weekEnd = today.endOf("week");
@@ -164,11 +165,11 @@ const TimesheetPanel = () => {
   //Functions to add and delete rows in timesheet table
 
   const addBAURow = () => {
-    setBAURows((prevRows) => [...prevRows, , { ...BAURowTemplate }]);
+    setBAURows((prevRows) => [...prevRows, { ...BAURowTemplate }]);
   };
 
   const addSalesRow = () => {
-    setSalesRows((prevRows) => [...prevRows, , { ...salesRowTemplate }]);
+    setSalesRows((prevRows) => [...prevRows, { ...salesRowTemplate }]);
   };
 
   const deleteBAURow = (indexToDelete) => {
@@ -678,6 +679,7 @@ const TimesheetPanel = () => {
                       p="7px"
                       mt="9px"
                       mb="9px"
+                      mr="4px"
                       value={row.hours.mon}
                       onChange={(e) =>
                         handleHourChange(
@@ -708,6 +710,7 @@ const TimesheetPanel = () => {
                       type="number"
                       textAlign="center"
                       p="7px"
+                      mr="4px"
                       value={row.hours.tue}
                       onChange={(e) =>
                         handleHourChange(
@@ -738,6 +741,7 @@ const TimesheetPanel = () => {
                       type="number"
                       textAlign="center"
                       p="7px"
+                      mr="4px"
                       value={row.hours.wed}
                       onChange={(e) =>
                         handleHourChange(
@@ -768,6 +772,7 @@ const TimesheetPanel = () => {
                       type="number"
                       textAlign="center"
                       p="7px"
+                      mr="4px"
                       value={row.hours.thu}
                       onChange={(e) =>
                         handleHourChange(
@@ -798,6 +803,7 @@ const TimesheetPanel = () => {
                       textAlign="center"
                       w="70px"
                       p="7px"
+                      mr="4px"
                       value={row.hours.fri}
                       onChange={(e) =>
                         handleHourChange(
@@ -828,6 +834,7 @@ const TimesheetPanel = () => {
                       type="number"
                       textAlign="center"
                       p="7px"
+                      mr="4px"
                       value={row.hours.sat}
                       onChange={(e) =>
                         handleHourChange(
@@ -1176,7 +1183,6 @@ const TimesheetPanel = () => {
                       size="sm"
                       w="70px"
                       p="7px"
-                      mr="4px"
                       mt="9px"
                       mb="9px"
                       type="number"
@@ -1209,7 +1215,6 @@ const TimesheetPanel = () => {
                       size="sm"
                       w="70px"
                       p="7px"
-                      mr="4px"
                       type="number"
                       textAlign="center"
                       value={row.hours.tue}
@@ -1240,7 +1245,6 @@ const TimesheetPanel = () => {
                       size="sm"
                       w="70px"
                       p="7px"
-                      mr="4px"
                       type="number"
                       textAlign="center"
                       value={row.hours.wed}
@@ -1270,7 +1274,6 @@ const TimesheetPanel = () => {
                       variant="filled"
                       size="sm"
                       w="70px"
-                      mr="4px"
                       p="7px"
                       type="number"
                       textAlign="center"
@@ -1302,7 +1305,6 @@ const TimesheetPanel = () => {
                       size="sm"
                       w="70px"
                       p="7px"
-                      mr="4px"
                       type="number"
                       textAlign="center"
                       value={row.hours.fri}
@@ -1333,7 +1335,6 @@ const TimesheetPanel = () => {
                       size="sm"
                       w="70px"
                       p="7px"
-                      mr="4px"
                       type="number"
                       textAlign="center"
                       value={row.hours.sat}
@@ -1364,7 +1365,6 @@ const TimesheetPanel = () => {
                       size="sm"
                       w="70px"
                       p="7px"
-                      mr="4px"
                       type="number"
                       textAlign="center"
                       value={row.hours.sun}
