@@ -5,7 +5,8 @@ const JINTabList = () => {
       <TabList
         textColor="white"
         width="15%"
-        height="100vh"
+        height="fit"
+        minH="100vh"
         bgGradient="linear(#19105b, #612a6e, #fe6196)"
         pl="5px"
         position="relative"

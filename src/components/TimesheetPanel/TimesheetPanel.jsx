@@ -9,12 +9,16 @@ import {
   IconButton,
   Text,
   Input,
+  Image,
   Menu,
   MenuButton,
   MenuList,
   InputRightElement,
   MenuItem,
   InputGroup,
+  useToast,
+  VStack,
+  HStack,
 } from "@chakra-ui/react";
 
 import {
@@ -25,10 +29,12 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   SearchIcon,
+  DeleteIcon,
 } from "@chakra-ui/icons";
 
 import { useState, useEffect } from "react";
 import { DateTime } from "luxon";
+import axios from "axios";
 
 import {
   BAUProjects,
@@ -42,14 +48,16 @@ import {
 } from "./DropdownOptions";
 
 const TimesheetPanel = () => {
-
   //States declaration
   const [weekStartDate, setWeekStartDate] = useState(DateTime.local());
   const [weekEndDate, setWeekEndDate] = useState(DateTime.local());
   const [searchTerm, setSearchTerm] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  const toast = useToast();
   const [tasks, setTasks] = useState(otherTasks);
-  const [total, setTotal] = useState({
+  const [timesheetData, setTimesheetData] = useState([]);
+
+  const totalTemplate = {
     mon: 0,
     tue: 0,
     wed: 0,
@@ -58,7 +66,7 @@ const TimesheetPanel = () => {
     sat: 0,
     sun: 0,
     overall: 0,
-  });
+  };
 
   const BAURowTemplate = {
     startDate: weekStartDate,
@@ -98,16 +106,43 @@ const TimesheetPanel = () => {
 
   const [BAURows, setBAURows] = useState([BAURowTemplate]);
   const [salesRows, setSalesRows] = useState([salesRowTemplate]);
+  const [total, setTotal] = useState(totalTemplate);
 
   //Effect to set the current week on component mount
   useEffect(() => {
     setCurrentWeek();
+    fetchData();
   }, []);
 
   //Effect to clear search bar after dropdown toggle
   useEffect(() => {
     setSearchTerm("");
   }, [isOpen]);
+
+  //Function to calculate and set the start and end dates of the current week
+  const setCurrentWeek = () => {
+    const today = DateTime.now();
+    const weekStart = today.startOf("week");
+    const weekEnd = today.endOf("week");
+    setWeekStartDate(weekStart);
+    setWeekEndDate(weekEnd);
+  };
+
+  //Function to navigate to the previous week
+  const handlePrevWeek = () => {
+    const prevWeekStart = weekStartDate.minus({ weeks: 1 });
+    const prevWeekEnd = prevWeekStart.endOf("week");
+    setWeekStartDate(prevWeekStart);
+    setWeekEndDate(prevWeekEnd);
+  };
+
+  //Function to navigate to the next week
+  const handleNextWeek = () => {
+    const nextWeekStart = weekStartDate.plus({ weeks: 1 });
+    const nextWeekEnd = nextWeekStart.endOf("week");
+    setWeekStartDate(nextWeekStart);
+    setWeekEndDate(nextWeekEnd);
+  };
 
   //Functon to handle task dropdown wrt project name
   const handleTaskChange = (projectName) => {
@@ -137,51 +172,48 @@ const TimesheetPanel = () => {
     task.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  //Function to calculate and set the start and end dates of the current week
-  const setCurrentWeek = () => {
-    const today = DateTime.now();
-    const weekStart = today.startOf("week");
-    const weekEnd = today.endOf("week");
-    setWeekStartDate(weekStart);
-    setWeekEndDate(weekEnd);
-  };
-
-  //Function to navigate to the previous week
-  const handlePrevWeek = () => {
-    const prevWeekStart = weekStartDate.minus({ weeks: 1 });
-    const prevWeekEnd = prevWeekStart.endOf("week");
-    setWeekStartDate(prevWeekStart);
-    setWeekEndDate(prevWeekEnd);
-  };
-
-  //Function to navigate to the next week
-  const handleNextWeek = () => {
-    const nextWeekStart = weekStartDate.plus({ weeks: 1 });
-    const nextWeekEnd = nextWeekStart.endOf("week");
-    setWeekStartDate(nextWeekStart);
-    setWeekEndDate(nextWeekEnd);
-  };
-
   //Functions to add and delete rows in timesheet table
 
   const addBAURow = () => {
-    setBAURows((prevRows) => [...prevRows, { ...BAURowTemplate }]);
+    setBAURows((prevRows) => {
+      const lastRow = prevRows[prevRows.length - 1];
+      const lastRowHasInput = Object.values(lastRow.hours).some(
+        (hour) => hour !== ""
+      );
+      return lastRowHasInput ? [...prevRows, { ...BAURowTemplate }] : prevRows;
+    });
   };
 
   const addSalesRow = () => {
-    setSalesRows((prevRows) => [...prevRows, { ...salesRowTemplate }]);
+    setSalesRows((prevRows) => {
+      const lastRow = prevRows[prevRows.length - 1];
+      const lastRowHasInput = Object.values(lastRow.hours).some(
+        (hour) => hour !== ""
+      );
+      return lastRowHasInput
+        ? [...prevRows, { ...salesRowTemplate }]
+        : prevRows;
+    });
   };
 
   const deleteBAURow = (indexToDelete) => {
-    setBAURows((prevRows) =>
-      prevRows.filter((_, index) => index !== indexToDelete)
-    );
+    setBAURows((prevRows) => {
+      const updatedRows = prevRows.filter(
+        (_, index) => index !== indexToDelete
+      );
+      updateTotals([...updatedRows, ...salesRows]);
+      return updatedRows;
+    });
   };
 
   const deleteSalesRow = (indexToDelete) => {
-    setSalesRows((prevRows) =>
-      prevRows.filter((_, index) => index !== indexToDelete)
-    );
+    setSalesRows((prevRows) => {
+      const updatedRows = prevRows.filter(
+        (_, index) => index !== indexToDelete
+      );
+      updateTotals([...BAURows, ...updatedRows]);
+      return updatedRows;
+    });
   };
 
   //Function to manage project and task state => Project Name, Task, Comment
@@ -285,6 +317,108 @@ const TimesheetPanel = () => {
 
     //Save the JSON in local storage
     localStorage.setItem("timesheetData", jsonData);
+
+    //Toast message to confirm local storage
+    toast({
+      title: "Saved Successfully",
+      status: "success",
+      duration: 3000,
+      isClosable: true,
+      position: "top-right",
+      colorScheme: "pink",
+    });
+  };
+
+  useEffect(() => {
+    // Retrieve data from local storage
+    const jsonData = localStorage.getItem("timesheetData");
+
+    if (jsonData) {
+      const parsedData = JSON.parse(jsonData);
+      console.log(parsedData);
+      // Update states
+      const startDate = DateTime.fromISO(parsedData.weekStartDate);
+      setWeekStartDate(startDate);
+      setBAURows(parsedData.BAURows);
+      setSalesRows(parsedData.salesRows);
+      setTotal(parsedData.total);
+      console.log("local storage fetch");
+      console.log(BAURows);
+      console.log(salesRows);
+      console.log(weekStartDate);
+    }
+  }, []);
+
+  //Clears Local Stotage and Timesheet table
+  const clearData = () => {
+    localStorage.clear();
+    setBAURows([BAURowTemplate]);
+    setSalesRows([salesRowTemplate]);
+    setTotal(totalTemplate);
+    setCurrentWeek();
+  };
+
+  //Fetches All Timesheets from DB
+  const fetchData = async () => {
+    try {
+      console.log("DB fetch");
+      const response = await axios.get("http://localhost:3000/getData");
+      setTimesheetData(response.data);
+    } catch (error) {
+      console.error("Error fetching timesheet data:", error);
+    }
+  };
+
+  //Sends Timesheet to DB
+  const sendData = async () => {
+    const dataToSend = {
+      weekStartDate: weekStartDate,
+      BAURows: BAURows,
+      salesRows: salesRows,
+      total: total,
+    };
+    console.log(dataToSend);
+    try {
+      const response = await axios.post(
+        "http://localhost:3000/addData",
+
+        dataToSend,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      console.log("Data sent successfully:", response.data.message);
+      fetchData();
+    } catch (error) {
+      console.error("Error sending data:", error.message);
+    }
+  };
+
+  const handleTimesheet = (index) => {
+    const startDate = DateTime.fromISO(timesheetData[index].weekStartDate);
+    setWeekStartDate(startDate);
+    setBAURows(timesheetData[index].BAURows);
+    setSalesRows(timesheetData[index].salesRows);
+    setTotal(timesheetData[index].total);
+  };
+
+  //Deletes the Timesheet from DB
+  const handleDelete = async (weekStartDate) => {
+    try {
+      const response = await axios.delete(
+        `http://localhost:3000/timesheet/delete/${weekStartDate}`
+      );
+      console.log(response.data.message);
+      fetchData();
+    } catch (error) {
+      console.error(
+        "Error deleting data:",
+        error.response ? error.response.data.error : error.message
+      );
+    }
   };
 
   return (
@@ -310,7 +444,7 @@ const TimesheetPanel = () => {
             }}
             mt="10px"
           >
-            Total Hours: {total.overall}
+            Total hours : {total.overall}
           </Text>
           <Text
             sx={{
@@ -887,8 +1021,8 @@ const TimesheetPanel = () => {
                       }}
                     />
                   </td>
-                  <td>
-                    <Input
+                  <td className="text-center font-light bg-[#fcfdfd] text-[#6d6f74]">
+                    {/* <Input
                       variant="filled"
                       size="sm"
                       w="70px"
@@ -907,7 +1041,8 @@ const TimesheetPanel = () => {
                         borderColor: "black",
                         border: "1px",
                       }}
-                    />
+                    /> */}
+                    {row.total}
                   </td>
                   <td>
                     <IconButton
@@ -1081,9 +1216,11 @@ const TimesheetPanel = () => {
                           {row.task ? row.task : "Task"}
                         </Box>
                       </MenuButton>
+
                       <MenuList
                         maxH="200px"
                         overflowY="auto"
+                        borderRadius="0"
                         overflowX="inherit"
                         css={{
                           "&::-webkit-scrollbar": {
@@ -1113,6 +1250,7 @@ const TimesheetPanel = () => {
                               borderColor: "black",
                               border: "1px",
                             }}
+                            onMouseDown={(e) => e.preventDefault()}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             maxW="calc(100% - 10px)"
                             border="1px solid gray"
@@ -1125,7 +1263,6 @@ const TimesheetPanel = () => {
                             <SearchIcon color="gray.400" />
                           </InputRightElement>
                         </InputGroup>
-
                         {filteredTasks.map((task, taskIndex) => (
                           <MenuItem
                             key={taskIndex}
@@ -1133,6 +1270,7 @@ const TimesheetPanel = () => {
                             color="gray.500"
                             p="10px"
                             fontWeight="light"
+                            borderRadius="0"
                             borderBottom="0.8px solid rgb(219, 226, 237)"
                             onClick={() =>
                               handleInputChange(
@@ -1389,8 +1527,8 @@ const TimesheetPanel = () => {
                       }}
                     />
                   </td>
-                  <td>
-                    <Input
+                  <td className="text-center font-light bg-[#fcfdfd] text-[#6d6f74]">
+                    {/* <Input
                       variant="filled"
                       size="sm"
                       w="70px"
@@ -1408,7 +1546,8 @@ const TimesheetPanel = () => {
                         borderColor: "black",
                         border: "1px",
                       }}
-                    />
+                    /> */}
+                    {row.total}
                   </td>
                   <td>
                     <IconButton
@@ -1442,58 +1581,54 @@ const TimesheetPanel = () => {
                 <td colSpan="3"></td>{" "}
                 <td
                   className={`text-center ${
-                    total.mon > 8 ? "text-red-500" : ""
+                    total.mon > 8 ? "text-red-500" : "text-[#6d6f74]"
                   } font-light`}
                 >
                   {total.mon}
                 </td>
                 <td
                   className={`text-center ${
-                    total.tue > 8 ? "text-red-500" : ""
+                    total.tue > 8 ? "text-red-500" : "text-[#6d6f74]"
                   } font-light`}
                 >
                   {total.tue}
                 </td>
                 <td
                   className={`text-center ${
-                    total.wed > 8 ? "text-red-500" : ""
+                    total.wed > 8 ? "text-red-500" : "text-[#6d6f74]"
                   } font-light`}
                 >
                   {total.wed}
                 </td>
                 <td
                   className={`text-center ${
-                    total.thu > 8 ? "text-red-500" : ""
+                    total.thu > 8 ? "text-red-500" : "text-[#6d6f74]"
                   } font-light`}
                 >
                   {total.thu}
                 </td>
                 <td
                   className={`text-center ${
-                    total.fri > 8 ? "text-red-500" : ""
+                    total.fri > 8 ? "text-red-500" : "text-[#6d6f74]"
                   } font-light`}
                 >
                   {total.fri}
                 </td>
                 <td
                   className={`text-center ${
-                    total.sat > 8 ? "text-red-500" : ""
+                    total.sat > 8 ? "text-red-500" : "text-[#6d6f74]"
                   } font-light`}
                 >
                   {total.sat}
                 </td>
                 <td
                   className={`text-center ${
-                    total.sun > 8 ? "text-red-500" : ""
+                    total.sun > 8 ? "text-red-500" : "text-[#6d6f74] "
                   } font-light`}
                 >
                   {total.sun}
                 </td>
-                <td
-                  className={`text-center ${
-                    total.overall > 56 ? "text-red-500" : ""
-                  } font-light`}
-                >
+                <td className={"text-center text-[#6d6f74] font-light"}>
                   {total.overall}
                 </td>
               </tr>
@@ -1552,7 +1687,24 @@ const TimesheetPanel = () => {
             _active={{ bgColor: "#19105b" }}
             onClick={saveData}
           >
-            SAVE
+            SAVE<Image src="/download.png" boxSize="15px" ml="10px"></Image>
+          </Button>
+          <Button
+            bgColor="#19105b"
+            variant="solid"
+            w="120px"
+            color="white"
+            fontSize="13px"
+            fontFamily="Arial"
+            borderRadius="4px"
+            fontWeight="light"
+            mr="20px"
+            _hover={{ bgColor: "#19105b" }}
+            _active={{ bgColor: "#19105b" }}
+            onClick={clearData}
+            rightIcon={<DeleteIcon />}
+          >
+            CLEAR
           </Button>
           <Button
             bgColor="#ff6196"
@@ -1566,9 +1718,63 @@ const TimesheetPanel = () => {
             rightIcon={<ArrowForwardIcon />}
             _hover={{ bgColor: "#ff6196" }}
             _active={{ bgColor: "#ff6196" }}
+            onClick={sendData}
           >
             SUBMIT
           </Button>
+        </Flex>
+        <Box>
+          {timesheetData.length>0 ?
+          <Text
+            fontSize="13px"
+            fontFamily="Arial"
+            fontWeight="bold"
+            color="#19105b"
+            mb="10px"
+          >
+            Timesheet Submissions
+          </Text> : <></>}
+        </Box>
+        <Flex>
+          <VStack spacing="10px">
+            {timesheetData &&
+              timesheetData.map((timesheet, index) => {
+                const startDate = DateTime.fromISO(timesheet.weekStartDate);
+                return (
+                  <HStack key={index}>
+                    <Button
+                      key={index}
+                      onClick={() => handleTimesheet(index)}
+                      bgColor="#ff6196"
+                      variant="solid"
+                      w="fit"
+                      color="white"
+                      fontSize="13px"
+                      fontFamily="Arial"
+                      borderRadius="4px"
+                      fontWeight="light"
+                      _hover={{ bgColor: "#ff6196" }}
+                      _active={{ bgColor: "#ff6196" }}
+                    >
+                      <Text>
+                        {startDate.toFormat("dd LLL yyyy")} -{" "}
+                        {startDate.endOf("week").toFormat("dd LLL yyyy")}
+                      </Text>
+                    </Button>
+                    <IconButton
+                      bgColor="#19105b"
+                      color="white"
+                      _hover={{ bgColor: "#19105b" }}
+                      _active={{ bgColor: "#19105b" }}
+                      fontSize="13px"
+                      fontFamily="Arial"
+                      onClick={() => handleDelete(startDate)}
+                      icon={<DeleteIcon />}
+                    />
+                  </HStack>
+                );
+              })}
+          </VStack>
         </Flex>
       </Box>
     </TabPanel>
